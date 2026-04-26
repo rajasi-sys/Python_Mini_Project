@@ -1,74 +1,88 @@
+import sys
+import os
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import streamlit as st
 import json
-import os
 import pandas as pd
 from datetime import datetime
-
-DATA_FILE= "data/expenses.json"        #path of file where expenses are stored
-
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return pd.DataFrame(columns=["amount", "category", "date", "note"])
-    
-    with open(DATA_FILE, "r") as f:
-        data= json.load(f)    #reads json data and converts it to python list
-        return pd.DataFrame(data)    #converts list to dataframe for easier manipulation(basically converts to a table)
-    
-
-def save_data(df):
-    df.to_json(DATA_FILE, orient="records", indent=4)    #saves the dataframe back to json file, orient makes it readable by separating each entry and indent adds indentation for better readability
-
-
-def add_expense(amount, caategory, date, note):
-    df= load_data()    #loads existing data into dataframe
-    new_entry= {"amount": amount, "category": caategory, "date": date, "note": note}    #creates a new entry as a dictionary
-
-    df= df.concat([df, pd.DataFrame([new_entry])], ignore_index=True)    #concatenates the new entry to the existing dataframe, ignore_index resets the index after concatenation
-    save_data(df)    #saves the updated dataframe back to json file
-
-
-def export_csv(df):
-    os.makedirs("reports", exist_ok=True)    #creates a directory named reports if it doesn't exist
-    file_name= f"reports/expenses_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"   #creates a filename with current date and time for uniqueness
-    df.to_csv(file_name, index=False)    #saves the dataframe to a csv file without the index
-    return file_name
-
-#----UI Functions----
+from module.visualization import show_category_pie_chart, show_monthly_trend_line, show_category_bar_chart
+from module.expenses_manager import ExpenseManager
+# ------------------ APP CONFIG ------------------ #
 st.set_page_config(page_title="Expense Tracker", layout="wide")
-st.title("💰 Expense Tracker Dashboard 💰 ")
+st.title("💰 Expense Tracker Dashboard")
 
-st.sidebar.header("➕ Add New Expense")
-amount= st.sidebar.number_input("Amount", min_value=0.0)
-category = st.sidebar.selectbox( "Category", ["Food", "Transport", "Shopping", "Bills", "Entertainment", "Health"])
-date = st.sidebar.date_input("Date", datetime.today())   #datetime.today() gives current date and time from the user's system
+# ------------------ INIT MANAGER ------------------ #
+manager = ExpenseManager()
+
+# ------------------ SIDEBAR: ADD EXPENSE ------------------ #
+st.sidebar.header("➕ Add Expense")
+
+amount = st.sidebar.number_input("Amount", min_value=0.0, step=1.0)
+category = st.sidebar.selectbox("Category", manager.get_categories() or ["Other"])
+date = st.sidebar.date_input("Date", datetime.today())
 note = st.sidebar.text_input("Note")
 
 if st.sidebar.button("Add Expense"):
-    add_expense(amount, category, date, note)
-    st.sidebar.success("Expense added successfully!")
+    try:
+        if amount <= 0:
+            st.sidebar.error("Amount must be greater than 0")
+        else:
+            manager.add_expense(amount, category, str(date), note)
+            st.sidebar.success("Expense added successfully!")
+            st.rerun()
+    except Exception as e:
+        st.sidebar.error(str(e))
 
-df = load_data()   #loads the data into a dataframe for display and manipulation
+# ------------------ LOAD DATA ------------------ #
+data = manager.get_all_expenses()
+df = pd.DataFrame(data)
 
+# ------------------ MAIN DASHBOARD ------------------ #
 st.subheader("📊 Overview")
 
 if not df.empty:
-    df["date"] = pd.to_datetime(df["date"])  #grouping the data by category and summing the amounts for each category, then sorting in descending order
-    total = df["amount"].sum()
-    st.metric("Total Spending", f"₹ {total:.2f}")
+    df["date"] = pd.to_datetime(df["date"])
 
-    selected_category = st.selectbox("Filter by Category", ["All"] + list(df["category"].unique()))  #creates a dropdown to filter the data by category, "All" option shows all data
+    # ------------------ METRICS ------------------ #
+    total_spent = manager.get_total_expense()
+    st.metric("Total Spending", f"₹ {total_spent:.2f}")
+
+    st.subheader("📊 Analytics & Insights")
+    col1, col2 = st.columns(2)
+    with col1:
+        show_category_pie_chart(df)
+    with col2:
+        show_category_bar_chart(df)
+        
+    show_monthly_trend_line(df)
+    # ---------------------------------
+
+    # ------------------ FILTER ------------------ #
+    selected_category = st.selectbox(
+        "Filter by Category",
+        ["All"] + list(df["category"].unique())
+    )
+
     if selected_category != "All":
         df = df[df["category"] == selected_category]
-    
-    st.subheader("📋 Expense Records")
-    st.dataframe(df)
 
-    # Export button
+    # ------------------ TABLE ------------------ #
+    st.subheader("📋 Expense Records")
+    st.dataframe(df, use_container_width=True)
+
+    # ------------------ EXPORT FUNCTION ------------------ #
+    def export_csv(dataframe):
+        os.makedirs("reports", exist_ok=True)
+        filename = f"reports/expenses_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        dataframe.to_csv(filename, index=False)
+        return filename
+
+    # ------------------ EXPORT BUTTON ------------------ #
     if st.button("📥 Export as CSV"):
-        file = export_csv(df)
-        st.success(f"Exported to {file}")
+        file_path = export_csv(df)
+        st.success(f"Exported successfully to: {file_path}")
 
 else:
-    st.info("No expenses added yet.")
-
-
+    st.info("No expenses added yet. Start by adding one from the sidebar 👈")
