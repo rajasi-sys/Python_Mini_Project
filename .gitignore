@@ -1,1 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# User data
+data/*.json
+!data/.gitkeep
+
+# Generated reports
+reports/*.csv
+!reports/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs / temporary files
+*.log
+*.tmp
+*.temp
